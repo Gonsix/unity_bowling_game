@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class OrderPin : MonoBehaviour
 {
@@ -8,11 +9,20 @@ public class OrderPin : MonoBehaviour
 
     int score = 0; // ピンが倒れた数とする
 
-    Pin[] pins = new Pin[NUM_PINS];
+    readonly List<Pin> pins = new List<Pin>(NUM_PINS);
 
 
     void Start()
     {
+        if (pinObject == null)
+        {
+            Debug.LogError("OrderPin: pinObject is not assigned.", this);
+            enabled = false;
+            return;
+        }
+
+        pins.Clear();
+
         float object_size = 0.9f;
         float spacing = object_size * 1.2f;
 
@@ -40,7 +50,7 @@ public class OrderPin : MonoBehaviour
                     pinPosition,
                     Quaternion.identity);
 
-                pins[row * (row + 1) / 2 + col] = instantiatedPin;
+                pins.Add(instantiatedPin);
             }
         }
     }
@@ -51,6 +61,11 @@ public class OrderPin : MonoBehaviour
         score = 0; // なんで毎回結果がゼロにはならないのか？→ 毎フレームスコアを数え直すため
         foreach (Pin pin in pins)
         {
+            if (pin == null)
+            {
+                continue;
+            }
+
             if (!pin.IsStanding())
             {
                 score++;
