@@ -29,13 +29,14 @@ public class OrderPin : MonoBehaviour
     private int displayedScore = -1;
 
     public int Score => score;
+    public bool HasPinObject => pinObject != null;
 
 
     void Start()
     {
         if (pinObject == null)
         {
-            if (HasConfiguredSiblingOrderPin())
+            if (FindConfiguredSiblingOrderPin() != null)
             {
                 enabled = false;
                 return;
@@ -46,38 +47,7 @@ public class OrderPin : MonoBehaviour
             return;
         }
 
-        pins.Clear();
-
-        float object_size = 0.9f;
-        float spacing = object_size * 1.2f;
-
-
-        // 三角形の段数
-        int rows = 4;
-
-        for (int row = 0; row < rows; row++)
-        {
-            // その段に置くピン数
-            int pinsInRow = row + 1;
-
-            for (int col = 0; col < pinsInRow; col++)
-            {
-                // 横方向
-                float z = (col - row * 0.5f) * spacing;
-
-                // 奥方向
-                float x = pinStartX + row * spacing;
-
-                Vector3 pinPosition = new Vector3(x, 1, z);
-
-                Pin instantiatedPin = Instantiate(
-                    pinObject,
-                    pinPosition,
-                    Quaternion.identity);
-
-                pins.Add(instantiatedPin);
-            }
-        }
+        SpawnPins();
 
         if (showScoreboard)
         {
@@ -246,5 +216,97 @@ public class OrderPin : MonoBehaviour
         }
 
         return false;
+    }
+
+    public void ResetPinsAndScore()
+    {
+        if (pinObject == null)
+        {
+            OrderPin configuredOrderPin = FindConfiguredSiblingOrderPin();
+
+            if (configuredOrderPin != null)
+            {
+                configuredOrderPin.ResetPinsAndScore();
+                return;
+            }
+
+            Debug.LogError("OrderPin: Cannot reset pins because pinObject is not assigned.", this);
+            return;
+        }
+
+        ClearPins();
+        score = 0;
+        displayedScore = -1;
+        SpawnPins();
+        UpdateScoreboardText();
+    }
+
+    private void SpawnPins()
+    {
+        if (pinObject == null)
+        {
+            Debug.LogError("OrderPin: Cannot spawn pins because pinObject is not assigned.", this);
+            return;
+        }
+
+        pins.Clear();
+
+        float object_size = 0.9f;
+        float spacing = object_size * 1.2f;
+
+        // 三角形の段数
+        int rows = 4;
+
+        for (int row = 0; row < rows; row++)
+        {
+            // その段に置くピン数
+            int pinsInRow = row + 1;
+
+            for (int col = 0; col < pinsInRow; col++)
+            {
+                // 横方向
+                float z = (col - row * 0.5f) * spacing;
+
+                // 奥方向
+                float x = pinStartX + row * spacing;
+
+                Vector3 pinPosition = new Vector3(x, 1, z);
+
+                Pin instantiatedPin = Instantiate(
+                    pinObject,
+                    pinPosition,
+                    Quaternion.identity);
+
+                pins.Add(instantiatedPin);
+            }
+        }
+    }
+
+    private void ClearPins()
+    {
+        foreach (Pin pin in pins)
+        {
+            if (pin != null)
+            {
+                Destroy(pin.gameObject);
+            }
+        }
+
+        pins.Clear();
+    }
+
+    private OrderPin FindConfiguredSiblingOrderPin()
+    {
+        OrderPin[] orderPins = GetComponents<OrderPin>();
+
+        foreach (OrderPin orderPin in orderPins)
+        {
+            if (orderPin != this && orderPin.pinObject != null)
+            {
+                return orderPin;
+            }
+        }
+
+        return null;
     }
 }

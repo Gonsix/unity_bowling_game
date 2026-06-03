@@ -150,6 +150,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OrderPin
   pinObject: {fileID: 0}
+  showScoreboard: 1
+  scoreboardPosition: {x: -25, y: 6, z: 0}
+  scoreboardSize: {x: 7, y: 2.6}
+  scoreboardDepth: 0.45
+  tvBodyColor: {r: 0.015, g: 0.015, b: 0.018, a: 1}
+  tvFrameColor: {r: 0.12, g: 0.12, b: 0.14, a: 1}
+  scoreboardBackgroundColor: {r: 0.02, g: 0.02, b: 0.02, a: 0.82}
+  scoreboardTextColor: {r: 1, g: 1, b: 1, a: 1}
+  pinStartX: -24
 --- !u!4 &59611822
 Transform:
   m_ObjectHideFlags: 0
@@ -178,6 +187,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OrderPin
   pinObject: {fileID: 1001157559}
+  showScoreboard: 1
+  scoreboardPosition: {x: 0, y: 20, z: 0}
+  scoreboardSize: {x: 24, y: 15}
+  scoreboardDepth: 0.45
+  tvBodyColor: {r: 0.015, g: 0.015, b: 0.018, a: 1}
+  tvFrameColor: {r: 0.12, g: 0.12, b: 0.14, a: 1}
+  scoreboardBackgroundColor: {r: 0.02, g: 0.02, b: 0.02, a: 0.82}
+  scoreboardTextColor: {r: 1, g: 0.9372188, b: 0, a: 1}
+  pinStartX: -24
 --- !u!1001 &296237281
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -393,10 +411,22 @@ MonoBehaviour:
   udpForceScale: 1200
   minimumUdpForce: 800
   maximumUdpForce: 6000
+  straightAssist: 0.85
+  lateralSensitivity: 0.45
+  verticalSensitivity: 0.12
+  straightLateralAccelThreshold: 0.8
+  straightOrientationThreshold: 18
+  requireCalibrationOnStart: 1
+  recalibrateKey: 99
+  minimumCalibrationAccel: 0.35
   allowMouseInput: 1
   laneWidth: 10
   shootForce: 4500
   suppressUpwardWallBounce: 1
+  resetKey: 114
+  orderPin: {fileID: 0}
+  debugStraightShotKey: 115
+  debugStraightShotForce: 4500
 --- !u!1 &687617553
 GameObject:
   m_ObjectHideFlags: 0

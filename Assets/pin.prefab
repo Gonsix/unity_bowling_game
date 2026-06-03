@@ -102,6 +102,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 60b6bd95244e74cd7a7eaef5ac369a42, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Pin
+  playFallEffect: 1
+  fallEffectColor: {r: 1, g: 0.82, b: 0.35, a: 1}
+  fallEffectParticleCount: 24
+  fallEffectLifetime: 1.2
+  playFallSound: 1
+  fallSoundVolume: 0.6
 --- !u!114 &8437305955560162940
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -114,6 +120,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6666135d707a24f80870a0c4bd699d0c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShootBall
+  udpReceiver: {fileID: 0}
+  useUdpInput: 1
+  udpForceScale: 4800
+  minimumUdpForce: 3200
+  maximumUdpForce: 24000
+  straightAssist: 0.85
+  lateralSensitivity: 0.45
+  verticalSensitivity: 0.12
+  straightLateralAccelThreshold: 0.8
+  straightOrientationThreshold: 18
+  requireCalibrationOnStart: 1
+  recalibrateKey: 99
+  minimumCalibrationAccel: 0.35
+  allowMouseInput: 1
+  laneWidth: 4
+  shootForce: 3600
+  suppressUpwardWallBounce: 1
+  resetKey: 114
+  orderPin: {fileID: 0}
+  debugStraightShotKey: 115
+  debugStraightShotForce: 9000
 --- !u!54 &-1501452748928587144
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -122,7 +149,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 45853230690101386}
   serializedVersion: 5
-  m_Mass: 1.5
+  m_Mass: 0.75
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
