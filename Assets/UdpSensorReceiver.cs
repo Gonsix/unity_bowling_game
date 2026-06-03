@@ -74,9 +74,9 @@ public class UdpSensorReceiver : MonoBehaviour
 
             if (logReceivedData && HasData)
             {
-                Debug.Log(
-                    $"UDP sensor: time={LatestData.time}, accel=({LatestData.accel.x:F2}, {LatestData.accel.y:F2}, {LatestData.accel.z:F2}), " +
-                    $"orientation=({LatestData.orientation.pitch:F2}, {LatestData.orientation.roll:F2}, {LatestData.orientation.yaw:F2}), button={LatestData.button}");
+                // Debug.Log(
+                //     $"UDP sensor: time={LatestData.time}, accel=({LatestData.accel.x:F2}, {LatestData.accel.y:F2}, {LatestData.accel.z:F2}), " +
+                //     $"orientation=({LatestData.orientation.pitch:F2}, {LatestData.orientation.roll:F2}, {LatestData.orientation.yaw:F2}), button={LatestData.button}");
             }
         }
         catch (Exception ex)
