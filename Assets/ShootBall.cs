@@ -7,7 +7,7 @@ public class ShootBall : MonoBehaviour
     [Header("UDP Input")]
     [SerializeField] private UdpSensorReceiver udpReceiver;
     [SerializeField] private bool useUdpInput = true;
-    [SerializeField] private float udpForceScale = 4800f;
+    [SerializeField] private float udpForceScale = 9600f;
     [SerializeField] private float minimumUdpForce = 3200f;
     [SerializeField] private float maximumUdpForce = 24000f;
 
@@ -22,6 +22,13 @@ public class ShootBall : MonoBehaviour
     [SerializeField] private bool requireCalibrationOnStart = true;
     [SerializeField] private KeyCode recalibrateKey = KeyCode.C;
     [SerializeField] private float minimumCalibrationAccel = 0.35f;
+
+    [Header("AR Marker Position")]
+    [SerializeField] private ARMarkerReceiver arMarkerReceiver;
+    [SerializeField] private bool useARMarkerPosition = true;
+    [SerializeField, Min(0f)] private float arMarkerZMovementScale = 10f;
+    [SerializeField] private bool invertARMarkerXForUnityZ = false;
+    [SerializeField] private bool showARMarkerDebugOverlay = false;
 
     [Header("Mouse Fallback")]
     [SerializeField] private bool allowMouseInput = true;
@@ -61,6 +68,10 @@ public class ShootBall : MonoBehaviour
     private Vector3 calibratedForwardSensorAxis = Vector3.right;
     private Vector3 calibratedSideSensorAxis = Vector3.forward;
     private Vector3 calibratedUpSensorAxis = Vector3.up;
+    private string arMarkerPositionStatus = "not updated yet";
+    private float lastARMarkerX;
+    private float lastARMarkerTargetZ;
+    private float lastARMarkerAppliedZ;
 
     private void Awake()
     {
@@ -74,6 +85,11 @@ public class ShootBall : MonoBehaviour
         if (udpReceiver == null)
         {
             udpReceiver = FindAnyObjectByType<UdpSensorReceiver>();
+        }
+
+        if (arMarkerReceiver == null)
+        {
+            arMarkerReceiver = FindBestARMarkerReceiver();
         }
 
         if (orderPin == null)
@@ -110,6 +126,8 @@ public class ShootBall : MonoBehaviour
             return;
         }
 
+        UpdateBallPositionFromARMarker();
+
         if (useUdpInput && TryShootFromUdp())
         {
             nageta = true;
@@ -129,6 +147,133 @@ public class ShootBall : MonoBehaviour
             Shoot(shootForce);
             nageta = true;
         }
+    }
+
+    private void UpdateBallPositionFromARMarker()
+    {
+        if (!useARMarkerPosition)
+        {
+            arMarkerPositionStatus = "disabled";
+            return;
+        }
+
+        if (arMarkerReceiver == null)
+        {
+            arMarkerReceiver = FindBestARMarkerReceiver();
+        }
+
+        if (arMarkerReceiver == null)
+        {
+            arMarkerPositionStatus = "ARMarkerReceiver is null";
+            return;
+        }
+
+        if (!arMarkerReceiver.HasData)
+        {
+            ARMarkerReceiver betterReceiver = FindBestARMarkerReceiver();
+            if (betterReceiver != null && betterReceiver != arMarkerReceiver && betterReceiver.HasData)
+            {
+                arMarkerReceiver = betterReceiver;
+            }
+        }
+
+        if (!arMarkerReceiver.HasData)
+        {
+            arMarkerPositionStatus = $"receiver has no parsed data, packets={arMarkerReceiver.ReceivedPacketCount}";
+            return;
+        }
+
+        if (arMarkerReceiver.LatestData == null)
+        {
+            arMarkerPositionStatus = "LatestData is null";
+            return;
+        }
+
+        if (arMarkerReceiver.LatestData.detection_result == null)
+        {
+            arMarkerPositionStatus = "detection_result is null";
+            return;
+        }
+
+        if (arMarkerReceiver.LatestData.detection_result.position_m == null)
+        {
+            arMarkerPositionStatus = "position_m is null";
+            return;
+        }
+
+        float markerX = (float)arMarkerReceiver.LatestData.detection_result.position_m.x;
+        float zOffset = markerX * arMarkerZMovementScale;
+
+        if (invertARMarkerXForUnityZ)
+        {
+            zOffset = -zOffset;
+        }
+
+        Vector3 newPosition = transform.position;
+        float halfLaneWidth = laneWidth * 0.5f;
+        float targetZ = initialPosition.z + zOffset;
+        newPosition.z = Mathf.Clamp(
+            targetZ,
+            initialPosition.z - halfLaneWidth,
+            initialPosition.z + halfLaneWidth);
+
+        transform.position = newPosition;
+        if (rb != null)
+        {
+            rb.position = newPosition;
+        }
+
+        lastARMarkerX = markerX;
+        lastARMarkerTargetZ = targetZ;
+        lastARMarkerAppliedZ = newPosition.z;
+        arMarkerPositionStatus = "applied";
+    }
+
+    private void OnGUI()
+    {
+        if (!showARMarkerDebugOverlay)
+        {
+            return;
+        }
+
+        const int width = 520;
+        GUILayout.BeginArea(new Rect(10f, 185f, width, 150f), GUI.skin.box);
+        GUILayout.Label("ShootBall AR marker movement");
+        GUILayout.Label($"enabled={useARMarkerPosition} receiver={(arMarkerReceiver == null ? "null" : arMarkerReceiver.name)} status={arMarkerPositionStatus}");
+        GUILayout.Label($"ball thrown={nageta} currentZ={transform.position.z:F4} initialZ={initialPosition.z:F4}");
+        GUILayout.Label($"position_m.x={lastARMarkerX:F4} scale={arMarkerZMovementScale:F3} invert={invertARMarkerXForUnityZ}");
+        GUILayout.Label($"targetZ={lastARMarkerTargetZ:F4} appliedZ={lastARMarkerAppliedZ:F4} laneWidth={laneWidth:F3}");
+        if (arMarkerReceiver != null)
+        {
+            GUILayout.Label($"receiver running={arMarkerReceiver.IsRunning} packets={arMarkerReceiver.ReceivedPacketCount} hasData={arMarkerReceiver.HasData}");
+        }
+        GUILayout.EndArea();
+    }
+
+    private ARMarkerReceiver FindBestARMarkerReceiver()
+    {
+        ARMarkerReceiver[] receivers = FindObjectsByType<ARMarkerReceiver>();
+        ARMarkerReceiver runningReceiver = null;
+
+        foreach (ARMarkerReceiver receiver in receivers)
+        {
+            if (receiver == null)
+            {
+                continue;
+            }
+
+            if (receiver.HasData)
+            {
+                return receiver;
+            }
+
+            if (runningReceiver == null && receiver.IsRunning)
+            {
+                runningReceiver = receiver;
+            }
+        }
+
+        return runningReceiver ?? (receivers.Length > 0 ? receivers[0] : null);
     }
 
     private bool TryShootFromUdp()
@@ -391,7 +536,7 @@ public class ShootBall : MonoBehaviour
 
         if (orderPin != null)
         {
-            orderPin.ResetPinsAndScore();
+            orderPin.CompleteCurrentShotAndPrepareNextTurn();
         }
     }
 

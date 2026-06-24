@@ -35,6 +35,9 @@ public class UdpSensorReceiver : MonoBehaviour
     [SerializeField] private int listenPort = 5005;
     [SerializeField] private bool logReceivedData = false;
 
+    private static readonly object activePortsLock = new object();
+    private static readonly System.Collections.Generic.HashSet<int> activePorts = new System.Collections.Generic.HashSet<int>();
+
     private readonly object latestJsonLock = new object();
     private string latestJson;
     private Thread receiveThread;
@@ -90,6 +93,11 @@ public class UdpSensorReceiver : MonoBehaviour
         StopServer();
     }
 
+    private void OnDestroy()
+    {
+        StopServer();
+    }
+
     private void OnApplicationQuit()
     {
         StopServer();
@@ -100,6 +108,17 @@ public class UdpSensorReceiver : MonoBehaviour
         if (isRunning)
         {
             return;
+        }
+
+        lock (activePortsLock)
+        {
+            if (activePorts.Contains(listenPort))
+            {
+                Debug.LogWarning($"UDP sensor receiver skipped: port {listenPort} is already active in this Unity process.", this);
+                return;
+            }
+
+            activePorts.Add(listenPort);
         }
 
         isRunning = true;
@@ -113,28 +132,27 @@ public class UdpSensorReceiver : MonoBehaviour
 
     public void StopServer()
     {
-        if (!isRunning)
+        if (isRunning)
         {
-            return;
+            isRunning = false;
+            udpClient?.Close();
+            udpClient = null;
+            ReleasePort();
+
+            if (receiveThread != null && receiveThread.IsAlive)
+            {
+                receiveThread.Join(200);
+            }
+
+            receiveThread = null;
         }
-
-        isRunning = false;
-        udpClient?.Close();
-        udpClient = null;
-
-        if (receiveThread != null && receiveThread.IsAlive)
-        {
-            receiveThread.Join(200);
-        }
-
-        receiveThread = null;
     }
 
     private void ReceiveLoop()
     {
         try
         {
-            udpClient = new UdpClient(listenPort);
+            udpClient = CreateUdpClient(listenPort);
             var remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
             while (isRunning)
@@ -150,9 +168,18 @@ public class UdpSensorReceiver : MonoBehaviour
         }
         catch (SocketException ex)
         {
+            isRunning = false;
+            udpClient?.Close();
+            udpClient = null;
+            ReleasePort();
+
             if (isRunning)
             {
                 Debug.LogError($"UDP receive error on port {listenPort}: {ex.Message}");
+            }
+            else
+            {
+                Debug.LogError($"UDP receiver could not bind port {listenPort}: {ex.Message}", this);
             }
         }
         catch (ObjectDisposedException)
@@ -160,10 +187,45 @@ public class UdpSensorReceiver : MonoBehaviour
         }
         catch (Exception ex)
         {
+            isRunning = false;
+            udpClient?.Close();
+            udpClient = null;
+            ReleasePort();
+
             if (isRunning)
             {
                 Debug.LogError($"UDP receiver stopped unexpectedly: {ex.Message}");
             }
+            else
+            {
+                Debug.LogError($"UDP receiver failed on port {listenPort}: {ex.Message}", this);
+            }
+        }
+    }
+
+    private static UdpClient CreateUdpClient(int port)
+    {
+        UdpClient client = new UdpClient(AddressFamily.InterNetwork);
+
+        try
+        {
+            client.ExclusiveAddressUse = false;
+            client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            client.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+            return client;
+        }
+        catch
+        {
+            client.Close();
+            throw;
+        }
+    }
+
+    private void ReleasePort()
+    {
+        lock (activePortsLock)
+        {
+            activePorts.Remove(listenPort);
         }
     }
 }
