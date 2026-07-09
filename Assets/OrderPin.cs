@@ -34,15 +34,30 @@ public class OrderPin : MonoBehaviour
     private TextMesh[] totalTexts;
     private TextMesh pinsText;
     private Renderer[] playerRowRenderers;
+    private Transform normalScoreboardContentRoot;
+    private Transform winnerScoreboardRoot;
+    private Transform winnerCrownRoot;
+    private TextMesh winnerPlayerText;
+    private TextMesh winnerLabelText;
+    private TextMesh winnerScoreText;
+    private TextMesh winnerHintText;
+    private Renderer winnerBackdropRenderer;
+    private Renderer winnerGlowRenderer;
+    private Vector3 winnerCrownBaseLocalPosition;
     private readonly Dictionary<TextMesh, Vector3> fittedTextLimits = new Dictionary<TextMesh, Vector3>();
     private Camera mainCamera;
     private string displayedScoreboardState = "";
     private int currentPlayerIndex = 0;
     private bool gameFinished = false;
     private int lastShotPins = 0;
+    private bool winnerPresentationActive = false;
 
     public int Score => score;
     public bool HasPinObject => pinObject != null;
+    public int CurrentPlayerIndex => currentPlayerIndex;
+    public int CurrentMarkerId => currentPlayerIndex + 1;
+    public bool IsGameFinished => gameFinished;
+    public string CurrentPlayerLabel => currentPlayerIndex == 0 ? "FIRST" : "SECOND";
 
     private class PlayerScore
     {
@@ -102,6 +117,7 @@ public class OrderPin : MonoBehaviour
         if (showScoreboard)
         {
             UpdateScoreboardText();
+            AnimateWinnerPresentation();
         }
     }
 
@@ -222,9 +238,12 @@ public class OrderPin : MonoBehaviour
         frameTexts = new TextMesh[PLAYER_COUNT, FRAME_COUNT];
         totalTexts = new TextMesh[PLAYER_COUNT];
         playerRowRenderers = new Renderer[PLAYER_COUNT];
+        normalScoreboardContentRoot = new GameObject("Scoreboard Normal Content").transform;
+        normalScoreboardContentRoot.SetParent(parent, false);
 
         float textZ = frontZ - 0.16f;
         float contentWidth = screenWidth * 0.86f;
+        Transform contentParent = normalScoreboardContentRoot;
         float leftX = -contentWidth * 0.5f;
         float topY = screenHeight * 0.37f;
         float headerY = screenHeight * 0.14f;
@@ -239,21 +258,21 @@ public class OrderPin : MonoBehaviour
 
         CreateCubePart(
             "Board Tint",
-            parent,
+            contentParent,
             new Vector3(0f, 0f, frontZ - 0.075f),
             new Vector3(screenWidth * 0.92f, screenHeight * 0.86f, 0.03f),
             new Color(0.004f, 0.015f, 0.026f, 1f));
 
         CreateCubePart(
             "Top Neon Rule",
-            parent,
+            contentParent,
             new Vector3(0f, screenHeight * 0.44f, frontZ - 0.11f),
             new Vector3(screenWidth * 0.86f, screenHeight * 0.018f, 0.035f),
             new Color(0.14f, 0.64f, 1f, 1f));
 
         titleText = CreateFittedText(
             "Title",
-            parent,
+            contentParent,
             new Vector3(leftX + contentWidth * 0.18f, topY, textZ),
             "BOWLING DUEL",
             new Color(1f, 0.86f, 0.22f, 1f),
@@ -263,7 +282,7 @@ public class OrderPin : MonoBehaviour
 
         turnText = CreateFittedText(
             "Turn",
-            parent,
+            contentParent,
             new Vector3(leftX + contentWidth * 0.74f, topY, textZ),
             "",
             scoreboardTextColor,
@@ -273,20 +292,20 @@ public class OrderPin : MonoBehaviour
 
         CreateCubePart(
             "Header Strip",
-            parent,
+            contentParent,
             new Vector3(0f, headerY, frontZ - 0.1f),
             new Vector3(contentWidth, screenHeight * 0.075f, 0.035f),
             new Color(0.035f, 0.1f, 0.145f, 1f));
 
-        CreateFittedText("Player Header", parent, new Vector3(playerX, headerY, textZ), "PLAYER", new Color(0.46f, 0.84f, 1f, 1f), contentWidth * 0.16f, screenHeight * 0.06f, 0.18f);
+        CreateFittedText("Player Header", contentParent, new Vector3(playerX, headerY, textZ), "PLAYER", new Color(0.46f, 0.84f, 1f, 1f), contentWidth * 0.16f, screenHeight * 0.06f, 0.18f);
 
         for (int frameIndex = 0; frameIndex < FRAME_COUNT; frameIndex++)
         {
             float frameX = frameStartX + frameIndex * frameGap;
-            CreateFittedText($"F{frameIndex + 1} Header", parent, new Vector3(frameX, headerY, textZ), $"F{frameIndex + 1}", new Color(0.46f, 0.84f, 1f, 1f), frameWidth, screenHeight * 0.06f, 0.18f);
+            CreateFittedText($"F{frameIndex + 1} Header", contentParent, new Vector3(frameX, headerY, textZ), $"F{frameIndex + 1}", new Color(0.46f, 0.84f, 1f, 1f), frameWidth, screenHeight * 0.06f, 0.18f);
         }
 
-        CreateFittedText("Total Header", parent, new Vector3(totalX, headerY, textZ), "TOTAL", new Color(1f, 0.86f, 0.22f, 1f), totalWidth, screenHeight * 0.06f, 0.18f);
+        CreateFittedText("Total Header", contentParent, new Vector3(totalX, headerY, textZ), "TOTAL", new Color(1f, 0.86f, 0.22f, 1f), totalWidth, screenHeight * 0.06f, 0.18f);
 
         for (int playerIndex = 0; playerIndex < PLAYER_COUNT; playerIndex++)
         {
@@ -297,21 +316,21 @@ public class OrderPin : MonoBehaviour
 
             playerRowRenderers[playerIndex] = CreateCubePart(
                 $"P{playerIndex + 1} Row",
-                parent,
+                contentParent,
                 new Vector3(0f, rowY, frontZ - 0.095f),
                 new Vector3(contentWidth, screenHeight * 0.15f, 0.035f),
                 rowColor);
 
             CreateCubePart(
                 $"P{playerIndex + 1} Accent",
-                parent,
+                contentParent,
                 new Vector3(leftX + contentWidth * 0.015f, rowY, frontZ - 0.13f),
                 new Vector3(contentWidth * 0.015f, screenHeight * 0.15f, 0.04f),
                 playerIndex == 0 ? new Color(0.2f, 0.75f, 1f, 1f) : new Color(1f, 0.28f, 0.68f, 1f));
 
             playerNameTexts[playerIndex] = CreateFittedText(
                 $"P{playerIndex + 1} Name",
-                parent,
+                contentParent,
                 new Vector3(playerX, rowY, textZ),
                 $"P{playerIndex + 1}",
                 Color.white,
@@ -324,14 +343,14 @@ public class OrderPin : MonoBehaviour
                 float frameX = frameStartX + frameIndex * frameGap;
                 CreateCubePart(
                     $"P{playerIndex + 1} F{frameIndex + 1} Cell",
-                    parent,
+                    contentParent,
                     new Vector3(frameX, rowY, frontZ - 0.13f),
                     new Vector3(frameWidth, screenHeight * 0.105f, 0.04f),
                     new Color(0.004f, 0.024f, 0.04f, 1f));
 
                 frameTexts[playerIndex, frameIndex] = CreateFittedText(
                     $"P{playerIndex + 1} F{frameIndex + 1}",
-                    parent,
+                    contentParent,
                     new Vector3(frameX, rowY, textZ),
                     "-",
                     Color.white,
@@ -342,14 +361,14 @@ public class OrderPin : MonoBehaviour
 
             CreateCubePart(
                 $"P{playerIndex + 1} Total Cell",
-                parent,
+                contentParent,
                 new Vector3(totalX, rowY, frontZ - 0.13f),
                 new Vector3(totalWidth, screenHeight * 0.105f, 0.04f),
                 new Color(0.12f, 0.088f, 0.02f, 1f));
 
             totalTexts[playerIndex] = CreateFittedText(
                 $"P{playerIndex + 1} Total",
-                parent,
+                contentParent,
                 new Vector3(totalX, rowY, textZ),
                 "000",
                 new Color(1f, 0.86f, 0.22f, 1f),
@@ -360,20 +379,121 @@ public class OrderPin : MonoBehaviour
 
         CreateCubePart(
             "Pins Status Backdrop",
-            parent,
+            contentParent,
             new Vector3(0f, -screenHeight * 0.39f, frontZ - 0.1f),
             new Vector3(contentWidth, screenHeight * 0.09f, 0.035f),
             new Color(0.01f, 0.06f, 0.048f, 1f));
 
         pinsText = CreateFittedText(
             "Pins",
-            parent,
+            contentParent,
             new Vector3(0f, -screenHeight * 0.39f, textZ),
             "",
             new Color(0.65f, 1f, 0.84f, 1f),
             contentWidth * 0.86f,
             screenHeight * 0.07f,
             0.24f);
+
+        CreateWinnerPresentationContent(parent, screenWidth, screenHeight, frontZ);
+        SetWinnerPresentationActive(false);
+    }
+
+    private void CreateWinnerPresentationContent(Transform parent, float screenWidth, float screenHeight, float frontZ)
+    {
+        winnerScoreboardRoot = new GameObject("Scoreboard Winner Presentation").transform;
+        winnerScoreboardRoot.SetParent(parent, false);
+
+        float textZ = frontZ - 0.18f;
+        float contentWidth = screenWidth * 0.86f;
+
+        winnerBackdropRenderer = CreateCubePart(
+            "Winner Backdrop",
+            winnerScoreboardRoot,
+            new Vector3(0f, 0f, frontZ - 0.13f),
+            new Vector3(screenWidth * 0.92f, screenHeight * 0.86f, 0.045f),
+            new Color(0.012f, 0.02f, 0.055f, 1f));
+
+        winnerGlowRenderer = CreateCubePart(
+            "Winner Glow",
+            winnerScoreboardRoot,
+            new Vector3(0f, 0.03f, frontZ - 0.17f),
+            new Vector3(screenWidth * 0.78f, screenHeight * 0.58f, 0.04f),
+            new Color(0.14f, 0.42f, 0.72f, 1f));
+
+        CreateCubePart(
+            "Winner Gold Rule Top",
+            winnerScoreboardRoot,
+            new Vector3(0f, screenHeight * 0.36f, frontZ - 0.2f),
+            new Vector3(contentWidth, screenHeight * 0.026f, 0.04f),
+            new Color(1f, 0.78f, 0.18f, 1f));
+
+        CreateCubePart(
+            "Winner Gold Rule Bottom",
+            winnerScoreboardRoot,
+            new Vector3(0f, -screenHeight * 0.36f, frontZ - 0.2f),
+            new Vector3(contentWidth, screenHeight * 0.026f, 0.04f),
+            new Color(1f, 0.78f, 0.18f, 1f));
+
+        winnerCrownRoot = new GameObject("Winner Crown").transform;
+        winnerCrownRoot.SetParent(winnerScoreboardRoot, false);
+        winnerCrownBaseLocalPosition = new Vector3(0f, -screenHeight * 0.02f, textZ - 0.02f);
+        winnerCrownRoot.localPosition = winnerCrownBaseLocalPosition;
+        CreateCrown(winnerCrownRoot, screenWidth, screenHeight, frontZ);
+
+        winnerPlayerText = CreateFittedText(
+            "Winner Player",
+            winnerScoreboardRoot,
+            new Vector3(0f, -screenHeight * 0.2f, textZ),
+            "",
+            Color.white,
+            contentWidth * 0.72f,
+            screenHeight * 0.24f,
+            0.82f);
+
+        winnerLabelText = CreateFittedText(
+            "Winner Label",
+            winnerScoreboardRoot,
+            new Vector3(0f, screenHeight * 0.22f, textZ),
+            "Winner",
+            new Color(1f, 0.82f, 0.24f, 1f),
+            contentWidth * 0.7f,
+            screenHeight * 0.14f,
+            0.44f);
+
+        winnerScoreText = CreateFittedText(
+            "Winner Score",
+            winnerScoreboardRoot,
+            new Vector3(0f, -screenHeight * 0.36f, textZ),
+            "",
+            new Color(0.7f, 0.94f, 1f, 1f),
+            contentWidth * 0.72f,
+            screenHeight * 0.08f,
+            0.24f);
+
+        winnerHintText = CreateFittedText(
+            "Winner Hint",
+            winnerScoreboardRoot,
+            new Vector3(0f, -screenHeight * 0.44f, textZ),
+            "PRESS R",
+            new Color(0.65f, 1f, 0.84f, 1f),
+            contentWidth * 0.5f,
+            screenHeight * 0.06f,
+            0.18f);
+    }
+
+    private void CreateCrown(Transform parent, float screenWidth, float screenHeight, float frontZ)
+    {
+        Color gold = new Color(1f, 0.76f, 0.16f, 1f);
+        Color brightGold = new Color(1f, 0.92f, 0.3f, 1f);
+        Color jewel = new Color(0.25f, 0.8f, 1f, 1f);
+        float crownWidth = screenWidth * 0.22f;
+        float crownHeight = screenHeight * 0.14f;
+
+        CreateCubePart("Crown Base", parent, Vector3.zero, new Vector3(crownWidth, crownHeight * 0.22f, 0.045f), gold);
+        CreateCubePart("Crown Left Peak", parent, new Vector3(-crownWidth * 0.32f, crownHeight * 0.25f, 0f), new Vector3(crownWidth * 0.16f, crownHeight * 0.62f, 0.045f), gold).transform.localRotation = Quaternion.Euler(0f, 0f, -18f);
+        CreateCubePart("Crown Center Peak", parent, new Vector3(0f, crownHeight * 0.33f, 0f), new Vector3(crownWidth * 0.16f, crownHeight * 0.78f, 0.045f), brightGold);
+        CreateCubePart("Crown Right Peak", parent, new Vector3(crownWidth * 0.32f, crownHeight * 0.25f, 0f), new Vector3(crownWidth * 0.16f, crownHeight * 0.62f, 0.045f), gold).transform.localRotation = Quaternion.Euler(0f, 0f, 18f);
+        CreateCubePart("Crown Center Jewel", parent, new Vector3(0f, crownHeight * 0.02f, -0.018f), new Vector3(crownWidth * 0.08f, crownHeight * 0.13f, 0.035f), jewel);
     }
 
     private TextMesh CreateFittedText(string objectName, Transform parent, Vector3 localPosition, string text, Color color, float maxWidth, float maxHeight, float maxCharacterSize)
@@ -443,12 +563,110 @@ public class OrderPin : MonoBehaviour
         }
     }
 
+    private void SetWinnerPresentationActive(bool active)
+    {
+        bool rootAlreadyMatches =
+            winnerScoreboardRoot != null &&
+            winnerScoreboardRoot.gameObject.activeSelf == active;
+
+        if (winnerPresentationActive == active && rootAlreadyMatches)
+        {
+            return;
+        }
+
+        winnerPresentationActive = active;
+
+        if (normalScoreboardContentRoot != null)
+        {
+            normalScoreboardContentRoot.gameObject.SetActive(!active);
+        }
+
+        if (winnerScoreboardRoot != null)
+        {
+            winnerScoreboardRoot.gameObject.SetActive(active);
+            winnerScoreboardRoot.localScale = active ? Vector3.one * 0.92f : Vector3.one;
+        }
+    }
+
+    private void UpdateWinnerPresentationText()
+    {
+        int firstPlayerScore = CalculatePlayerScore(playerScores[0]);
+        int secondPlayerScore = CalculatePlayerScore(playerScores[1]);
+        int winnerPlayerIndex = GetWinnerPlayerIndex();
+
+        if (winnerPlayerIndex < 0)
+        {
+            UpdateFittedText(winnerPlayerText, "DRAW");
+            UpdateFittedText(winnerLabelText, "GAME SET");
+            UpdateFittedText(winnerScoreText, $"P1 {firstPlayerScore:000}  -  P2 {secondPlayerScore:000}");
+            winnerPlayerText.color = Color.white;
+
+            if (winnerCrownRoot != null)
+            {
+                winnerCrownRoot.gameObject.SetActive(false);
+            }
+
+            return;
+        }
+
+        UpdateFittedText(winnerPlayerText, $"P{winnerPlayerIndex + 1}");
+        UpdateFittedText(winnerLabelText, "Winner");
+        UpdateFittedText(winnerScoreText, $"P1 {firstPlayerScore:000}  -  P2 {secondPlayerScore:000}");
+        winnerPlayerText.color = winnerPlayerIndex == 0
+            ? new Color(0.66f, 0.9f, 1f, 1f)
+            : new Color(1f, 0.64f, 0.9f, 1f);
+
+        if (winnerCrownRoot != null)
+        {
+            winnerCrownRoot.gameObject.SetActive(true);
+        }
+    }
+
+    private void AnimateWinnerPresentation()
+    {
+        if (!winnerPresentationActive || winnerScoreboardRoot == null)
+        {
+            return;
+        }
+
+        float t = Time.time;
+        float pulse = 1f + Mathf.Sin(t * 4.2f) * 0.035f;
+        winnerScoreboardRoot.localScale = Vector3.one * pulse;
+
+        if (winnerCrownRoot != null && winnerCrownRoot.gameObject.activeSelf)
+        {
+            float bob = Mathf.Sin(t * 5.4f) * 0.035f;
+            winnerCrownRoot.localPosition = winnerCrownBaseLocalPosition + new Vector3(0f, bob, 0f);
+            winnerCrownRoot.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 3.1f) * 4f);
+        }
+
+        if (winnerGlowRenderer != null)
+        {
+            float glow = 0.55f + Mathf.Sin(t * 3.7f) * 0.18f;
+            winnerGlowRenderer.material.color = Color.Lerp(
+                new Color(0.08f, 0.22f, 0.42f, 1f),
+                new Color(0.24f, 0.58f, 0.95f, 1f),
+                glow);
+        }
+
+        if (winnerBackdropRenderer != null)
+        {
+            float shimmer = 0.5f + Mathf.Sin(t * 2.2f) * 0.08f;
+            winnerBackdropRenderer.material.color = Color.Lerp(
+                new Color(0.008f, 0.014f, 0.04f, 1f),
+                new Color(0.025f, 0.028f, 0.075f, 1f),
+                shimmer);
+        }
+    }
+
     private void UpdateScoreboardText()
     {
         if (turnText == null || pinsText == null)
         {
             return;
         }
+
+        SetWinnerPresentationActive(gameFinished);
 
         string state = BuildScoreboardState();
 
@@ -460,13 +678,18 @@ public class OrderPin : MonoBehaviour
         displayedScoreboardState = state;
         bool isPlayerOneTurn = !gameFinished && currentPlayerIndex == 0;
 
-        string turnLabel = gameFinished
-            ? "GAME SET  /  PRESS R"
-            : $"P{currentPlayerIndex + 1} TURN    F{GetCurrentFrameIndex() + 1}-{GetCurrentThrowNumber()}";
+        if (gameFinished)
+        {
+            UpdateWinnerPresentationText();
+            return;
+        }
+
+        UpdateFittedText(titleText, $"{CurrentPlayerLabel} SCORE");
+        string turnLabel = $"{CurrentPlayerLabel} TURN  M{CurrentMarkerId}  F{GetCurrentFrameIndex() + 1}-{GetCurrentThrowNumber()}";
         UpdateFittedText(turnText, turnLabel);
-        turnText.color = gameFinished
-            ? new Color(1f, 0.88f, 0.22f, 1f)
-            : (isPlayerOneTurn ? new Color(0.66f, 0.9f, 1f, 1f) : new Color(1f, 0.64f, 0.9f, 1f));
+        turnText.color = isPlayerOneTurn
+            ? new Color(0.66f, 0.9f, 1f, 1f)
+            : new Color(1f, 0.64f, 0.9f, 1f);
 
         for (int playerIndex = 0; playerIndex < PLAYER_COUNT; playerIndex++)
         {
@@ -480,7 +703,8 @@ public class OrderPin : MonoBehaviour
                     : (playerIndex == 0 ? new Color(0.03f, 0.12f, 0.2f, 0.95f) : new Color(0.16f, 0.055f, 0.13f, 0.95f));
             }
 
-            UpdateFittedText(playerNameTexts[playerIndex], isCurrentPlayer ? $"P{playerIndex + 1}>" : $"P{playerIndex + 1}");
+            string playerLabel = playerIndex == 0 ? "FIRST M1" : "SECOND M2";
+            UpdateFittedText(playerNameTexts[playerIndex], isCurrentPlayer ? $"{playerLabel}>" : playerLabel);
             playerNameTexts[playerIndex].color = isCurrentPlayer
                 ? new Color(1f, 0.92f, 0.35f, 1f)
                 : Color.white;
@@ -644,6 +868,31 @@ public class OrderPin : MonoBehaviour
     private int GetRollOrZero(List<int> rolls, int index)
     {
         return index >= 0 && index < rolls.Count ? rolls[index] : 0;
+    }
+
+    private string GetWinnerDisplayLabel()
+    {
+        int winnerPlayerIndex = GetWinnerPlayerIndex();
+
+        if (winnerPlayerIndex < 0)
+        {
+            return "DRAW GAME";
+        }
+
+        return winnerPlayerIndex == 0 ? "FIRST Winner" : "SECOND Winner";
+    }
+
+    private int GetWinnerPlayerIndex()
+    {
+        int firstPlayerScore = CalculatePlayerScore(playerScores[0]);
+        int secondPlayerScore = CalculatePlayerScore(playerScores[1]);
+
+        if (firstPlayerScore == secondPlayerScore)
+        {
+            return -1;
+        }
+
+        return firstPlayerScore > secondPlayerScore ? 0 : 1;
     }
 
     private int GetCurrentFrameIndex()

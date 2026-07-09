@@ -32,11 +32,12 @@ public class UdpSensorReceiver : MonoBehaviour
         public bool button;
     }
 
-    [SerializeField] private int listenPort = 5005;
+    [SerializeField] private int listenPort = 5003;
     [SerializeField] private bool logReceivedData = false;
 
     private static readonly object activePortsLock = new object();
-    private static readonly System.Collections.Generic.HashSet<int> activePorts = new System.Collections.Generic.HashSet<int>();
+    private static readonly System.Collections.Generic.Dictionary<int, UdpSensorReceiver> activeReceiversByPort =
+        new System.Collections.Generic.Dictionary<int, UdpSensorReceiver>();
 
     private readonly object latestJsonLock = new object();
     private string latestJson;
@@ -77,9 +78,9 @@ public class UdpSensorReceiver : MonoBehaviour
 
             if (logReceivedData && HasData)
             {
-                // Debug.Log(
-                //     $"UDP sensor: time={LatestData.time}, accel=({LatestData.accel.x:F2}, {LatestData.accel.y:F2}, {LatestData.accel.z:F2}), " +
-                //     $"orientation=({LatestData.orientation.pitch:F2}, {LatestData.orientation.roll:F2}, {LatestData.orientation.yaw:F2}), button={LatestData.button}");
+                Debug.Log(
+                    $"UDP sensor: time={LatestData.time}, accel=({LatestData.accel.x:F2}, {LatestData.accel.y:F2}, {LatestData.accel.z:F2}), " +
+                    $"orientation=({LatestData.orientation.pitch:F2}, {LatestData.orientation.roll:F2}, {LatestData.orientation.yaw:F2}), button={LatestData.button}");
             }
         }
         catch (Exception ex)
@@ -110,15 +111,38 @@ public class UdpSensorReceiver : MonoBehaviour
             return;
         }
 
+        UdpSensorReceiver receiverToStop = null;
         lock (activePortsLock)
         {
-            if (activePorts.Contains(listenPort))
+            if (activeReceiversByPort.TryGetValue(listenPort, out UdpSensorReceiver activeReceiver) &&
+                activeReceiver != null &&
+                activeReceiver != this)
             {
-                Debug.LogWarning($"UDP sensor receiver skipped: port {listenPort} is already active in this Unity process.", this);
+                receiverToStop = activeReceiver;
+            }
+        }
+
+        if (receiverToStop != null)
+        {
+            Debug.LogWarning(
+                $"UDP sensor receiver on {name} is closing existing receiver {receiverToStop.name} for port {listenPort}.",
+                this);
+            receiverToStop.StopServer();
+        }
+
+        lock (activePortsLock)
+        {
+            if (activeReceiversByPort.TryGetValue(listenPort, out UdpSensorReceiver activeReceiver) &&
+                activeReceiver != null &&
+                activeReceiver != this)
+            {
+                Debug.LogWarning(
+                    $"UDP sensor receiver on {name} could not take port {listenPort}; existing receiver {activeReceiver.name} is still active.",
+                    this);
                 return;
             }
 
-            activePorts.Add(listenPort);
+            activeReceiversByPort[listenPort] = this;
         }
 
         isRunning = true;
@@ -132,20 +156,23 @@ public class UdpSensorReceiver : MonoBehaviour
 
     public void StopServer()
     {
-        if (isRunning)
+        if (!isRunning)
         {
-            isRunning = false;
-            udpClient?.Close();
-            udpClient = null;
             ReleasePort();
-
-            if (receiveThread != null && receiveThread.IsAlive)
-            {
-                receiveThread.Join(200);
-            }
-
-            receiveThread = null;
+            return;
         }
+
+        isRunning = false;
+        udpClient?.Close();
+        udpClient = null;
+        ReleasePort();
+
+        if (receiveThread != null && receiveThread.IsAlive)
+        {
+            receiveThread.Join(200);
+        }
+
+        receiveThread = null;
     }
 
     private void ReceiveLoop()
@@ -225,7 +252,11 @@ public class UdpSensorReceiver : MonoBehaviour
     {
         lock (activePortsLock)
         {
-            activePorts.Remove(listenPort);
+            if (activeReceiversByPort.TryGetValue(listenPort, out UdpSensorReceiver activeReceiver) &&
+                activeReceiver == this)
+            {
+                activeReceiversByPort.Remove(listenPort);
+            }
         }
     }
 }

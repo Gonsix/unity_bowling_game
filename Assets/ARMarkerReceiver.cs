@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class ARMarkerReceiver : MonoBehaviour
@@ -41,7 +42,11 @@ public class ARMarkerReceiver : MonoBehaviour
         new System.Collections.Generic.Dictionary<int, ARMarkerReceiver>();
 
     private readonly object latestJsonLock = new object();
-    private string latestJson;
+    private readonly Queue<string> pendingJson = new Queue<string>();
+    private readonly Dictionary<int, MarkerPositionData> latestDataByMarkerId =
+        new Dictionary<int, MarkerPositionData>();
+    private readonly Dictionary<int, float> lastReceivedRealtimeByMarkerId =
+        new Dictionary<int, float>();
     private string latestRawJson;
     private string lastParseError;
     private Thread receiveThread;
@@ -65,6 +70,35 @@ public class ARMarkerReceiver : MonoBehaviour
         : lastReceivedRealtime < 0f ? -1f : Time.realtimeSinceStartup - lastReceivedRealtime;
     public bool IsProxyReceiver => proxySource != null;
 
+    public bool TryGetMarkerPositionX(int markerId, float maximumAgeSeconds, out float positionX)
+    {
+        if (proxySource != null)
+        {
+            return proxySource.TryGetMarkerPositionX(markerId, maximumAgeSeconds, out positionX);
+        }
+
+        positionX = 0f;
+
+        if (!latestDataByMarkerId.TryGetValue(markerId, out MarkerPositionData markerData) ||
+            markerData == null ||
+            markerData.detection_result == null ||
+            !markerData.detection_result.detected ||
+            markerData.detection_result.position_m == null)
+        {
+            return false;
+        }
+
+        if (maximumAgeSeconds > 0f &&
+            lastReceivedRealtimeByMarkerId.TryGetValue(markerId, out float receivedAt) &&
+            Time.realtimeSinceStartup - receivedAt > maximumAgeSeconds)
+        {
+            return false;
+        }
+
+        positionX = (float)markerData.detection_result.position_m.x;
+        return true;
+    }
+
     private void OnEnable()
     {
         StartServer();
@@ -78,44 +112,52 @@ public class ARMarkerReceiver : MonoBehaviour
 
     private void UpdateMarkerPositionData()
     {
-        string jsonToParse = null;
+        List<string> jsonPackets = null;
 
         lock (latestJsonLock)
         {
-            if (!string.IsNullOrEmpty(latestJson))
+            if (pendingJson.Count > 0)
             {
-                jsonToParse = latestJson;
-                latestJson = null;
+                jsonPackets = new List<string>(pendingJson);
+                pendingJson.Clear();
             }
         }
 
-        if (jsonToParse == null)
+        if (jsonPackets == null)
         {
             return;
         }
 
-        lastReceivedRealtime = Time.realtimeSinceStartup;
-
-        try
+        foreach (string jsonToParse in jsonPackets)
         {
-            latestData = JsonUtility.FromJson<MarkerPositionData>(jsonToParse);
-            lastParseError = null;
-            hasData =
-                latestData != null &&
-                latestData.detection_result != null &&
-                latestData.detection_result.detected;
-
-            if (hasData)
+            try
             {
-                latestCenterRelativeLateralMeters =
-                    -(float)latestData.detection_result.lateral_offset_m;
+                latestData = JsonUtility.FromJson<MarkerPositionData>(jsonToParse);
+                lastParseError = null;
+                lastReceivedRealtime = Time.realtimeSinceStartup;
+                hasData =
+                    latestData != null &&
+                    latestData.detection_result != null &&
+                    latestData.detection_result.detected;
+
+                if (latestData != null)
+                {
+                    latestDataByMarkerId[latestData.marker_id] = latestData;
+                    lastReceivedRealtimeByMarkerId[latestData.marker_id] = lastReceivedRealtime;
+                }
+
+                if (hasData)
+                {
+                    latestCenterRelativeLateralMeters =
+                        -(float)latestData.detection_result.lateral_offset_m;
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            hasData = false;
-            lastParseError = ex.Message;
-            Debug.LogWarning($"Invalid AR marker UDP JSON: {jsonToParse}\n{ex.Message}");
+            catch (Exception ex)
+            {
+                hasData = false;
+                lastParseError = ex.Message;
+                Debug.LogWarning($"Invalid AR marker UDP JSON: {jsonToParse}\n{ex.Message}");
+            }
         }
     }
 
@@ -261,9 +303,14 @@ public class ARMarkerReceiver : MonoBehaviour
 
                 lock (latestJsonLock)
                 {
-                    latestJson = json;
+                    pendingJson.Enqueue(json);
                     latestRawJson = json;
                     receivedPacketCount++;
+
+                    while (pendingJson.Count > 120)
+                    {
+                        pendingJson.Dequeue();
+                    }
                 }
             }
         }

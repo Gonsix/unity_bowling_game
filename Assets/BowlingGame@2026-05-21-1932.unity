@@ -147,7 +147,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a9bc7fd987b9046a1882ef3e4786ab86, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::OrderPin
   pinObject: {fileID: 0}
   showScoreboard: 1
@@ -184,12 +184,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a9bc7fd987b9046a1882ef3e4786ab86, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::OrderPin
   pinObject: {fileID: 1001157559}
   showScoreboard: 1
   scoreboardPosition: {x: 0, y: 20, z: 0}
-  scoreboardSize: {x: 24, y: 15}
+  scoreboardSize: {x: 48, y: 30}
   scoreboardDepth: 0.45
   tvBodyColor: {r: 0.015, g: 0.015, b: 0.018, a: 1}
   tvFrameColor: {r: 0.12, g: 0.12, b: 0.14, a: 1}
@@ -404,7 +404,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6666135d707a24f80870a0c4bd699d0c, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::ShootBall
   udpReceiver: {fileID: 0}
   useUdpInput: 1
@@ -459,7 +459,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b7ab6c4f1f8142fbb1764bdbf40866b5, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::ARMarkerReceiver
   listenPort: 5007
   logMarkerPositionEveryFrame: 0
@@ -599,9 +599,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c68e81164c1646bc9a6f1360f81fef47, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::UdpSensorReceiver
-  listenPort: 5005
+  listenPort: 5003
   logReceivedData: 1
 --- !u!4 &829696348
 Transform:
@@ -628,7 +628,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b7ab6c4f1f8142fbb1764bdbf40866b5, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::ARMarkerReceiver
   listenPort: 5007
   logMarkerPositionEveryFrame: 0
@@ -739,7 +739,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 60b6bd95244e74cd7a7eaef5ac369a42, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Pin
 --- !u!1 &1600010000
 GameObject:

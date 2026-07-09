@@ -23,12 +23,27 @@ public class ShootBall : MonoBehaviour
     [SerializeField] private KeyCode recalibrateKey = KeyCode.C;
     [SerializeField] private float minimumCalibrationAccel = 0.35f;
 
+    [Header("Calibration Guide")]
+    [SerializeField] private bool showCalibrationGuide = true;
+    [SerializeField] private string calibrationTitleText = "キャリブレーション";
+    [SerializeField] private string calibrationReadyText = "ボタンを押しながら手を前に振り、離してください";
+    [SerializeField] private string calibrationActiveText = "手を前に振ってください";
+    [SerializeField] private string calibrationSuccessText = "キャリブレーション完了";
+    [SerializeField] private string calibrationFailureText = "振りが小さすぎます。もう一度、手を前に振ってください";
+    [SerializeField, Min(0.1f)] private float calibrationResultMessageSeconds = 1.8f;
+    [SerializeField, Range(0f, 1f)] private float calibrationGuideVerticalPosition = 0.72f;
+
     [Header("AR Marker Position")]
     [SerializeField] private ARMarkerReceiver arMarkerReceiver;
     [SerializeField] private bool useARMarkerPosition = true;
     [SerializeField, Min(0f)] private float arMarkerZMovementScale = 10f;
     [SerializeField] private bool invertARMarkerXForUnityZ = false;
+    [SerializeField, Min(0f)] private float arMarkerMaximumAge = 0.75f;
     [SerializeField] private bool showARMarkerDebugOverlay = false;
+
+    [Header("Player Ball Colors")]
+    [SerializeField] private Color firstPlayerBallColor = new Color(0.1f, 0.55f, 1f, 1f);
+    [SerializeField] private Color secondPlayerBallColor = new Color(1f, 0.18f, 0.55f, 1f);
 
     [Header("Mouse Fallback")]
     [SerializeField] private bool allowMouseInput = true;
@@ -72,12 +87,22 @@ public class ShootBall : MonoBehaviour
     private float lastARMarkerX;
     private float lastARMarkerTargetZ;
     private float lastARMarkerAppliedZ;
+    private Renderer[] ballRenderers;
+    private MaterialPropertyBlock ballColorProperties;
+    private int displayedPlayerIndex = -1;
+    private GUIStyle calibrationPanelStyle;
+    private GUIStyle calibrationTitleStyle;
+    private GUIStyle calibrationMessageStyle;
+    private string calibrationResultMessage = "";
+    private float calibrationResultMessageUntil = -1f;
 
     private void Awake()
     {
         EnsureRigidbody();
         initialPosition = transform.position;
         initialRotation = transform.rotation;
+        ballRenderers = GetComponentsInChildren<Renderer>();
+        ballColorProperties = new MaterialPropertyBlock();
     }
 
     private void Start()
@@ -96,10 +121,14 @@ public class ShootBall : MonoBehaviour
         {
             orderPin = FindConfiguredOrderPin();
         }
+
+        UpdateBallColorForCurrentPlayer();
     }
 
     private void Update()
     {
+        UpdateBallColorForCurrentPlayer();
+
         if (Input.GetKeyDown(resetKey))
         {
             ResetBall();
@@ -116,6 +145,7 @@ public class ShootBall : MonoBehaviour
         {
             isCalibrated = false;
             isCalibrationHold = false;
+            ClearCalibrationResultMessage();
             Debug.Log("UDP calibration reset. Hold the sensor button, swing straight forward, then release.", this);
             return;
         }
@@ -168,40 +198,13 @@ public class ShootBall : MonoBehaviour
             return;
         }
 
-        if (!arMarkerReceiver.HasData)
+        int activeMarkerId = orderPin != null ? orderPin.CurrentMarkerId : 1;
+        if (!arMarkerReceiver.TryGetMarkerPositionX(activeMarkerId, arMarkerMaximumAge, out float markerX))
         {
-            ARMarkerReceiver betterReceiver = FindBestARMarkerReceiver();
-            if (betterReceiver != null && betterReceiver != arMarkerReceiver && betterReceiver.HasData)
-            {
-                arMarkerReceiver = betterReceiver;
-            }
-        }
-
-        if (!arMarkerReceiver.HasData)
-        {
-            arMarkerPositionStatus = $"receiver has no parsed data, packets={arMarkerReceiver.ReceivedPacketCount}";
+            arMarkerPositionStatus = $"waiting for active marker_id={activeMarkerId}";
             return;
         }
 
-        if (arMarkerReceiver.LatestData == null)
-        {
-            arMarkerPositionStatus = "LatestData is null";
-            return;
-        }
-
-        if (arMarkerReceiver.LatestData.detection_result == null)
-        {
-            arMarkerPositionStatus = "detection_result is null";
-            return;
-        }
-
-        if (arMarkerReceiver.LatestData.detection_result.position_m == null)
-        {
-            arMarkerPositionStatus = "position_m is null";
-            return;
-        }
-
-        float markerX = (float)arMarkerReceiver.LatestData.detection_result.position_m.x;
         float zOffset = markerX * arMarkerZMovementScale;
 
         if (invertARMarkerXForUnityZ)
@@ -226,11 +229,13 @@ public class ShootBall : MonoBehaviour
         lastARMarkerX = markerX;
         lastARMarkerTargetZ = targetZ;
         lastARMarkerAppliedZ = newPosition.z;
-        arMarkerPositionStatus = "applied";
+        arMarkerPositionStatus = $"applied marker_id={activeMarkerId}";
     }
 
     private void OnGUI()
     {
+        DrawCalibrationGuide();
+
         if (!showARMarkerDebugOverlay)
         {
             return;
@@ -248,6 +253,84 @@ public class ShootBall : MonoBehaviour
             GUILayout.Label($"receiver running={arMarkerReceiver.IsRunning} packets={arMarkerReceiver.ReceivedPacketCount} hasData={arMarkerReceiver.HasData}");
         }
         GUILayout.EndArea();
+    }
+
+    private void DrawCalibrationGuide()
+    {
+        if (!showCalibrationGuide)
+        {
+            return;
+        }
+
+        bool isCalibrationRequired = useUdpInput && requireCalibrationOnStart && !isCalibrated && !nageta;
+        bool showResultMessage =
+            Time.realtimeSinceStartup < calibrationResultMessageUntil &&
+            !string.IsNullOrEmpty(calibrationResultMessage);
+
+        if (!isCalibrationRequired && !isCalibrationHold && !showResultMessage)
+        {
+            return;
+        }
+
+        EnsureCalibrationGuiStyles();
+
+        string message = calibrationResultMessage;
+        if (isCalibrationHold)
+        {
+            message = calibrationActiveText;
+        }
+        else if (isCalibrationRequired)
+        {
+            message = calibrationReadyText;
+        }
+
+        float panelWidth = Mathf.Clamp(Screen.width - 40f, 280f, 720f);
+        float panelHeight = 132f;
+        float panelY = Mathf.Clamp(
+            Screen.height * calibrationGuideVerticalPosition - panelHeight * 0.5f,
+            24f,
+            Screen.height - panelHeight - 24f);
+        Rect panelRect = new Rect(
+            (Screen.width - panelWidth) * 0.5f,
+            panelY,
+            panelWidth,
+            panelHeight);
+
+        GUILayout.BeginArea(panelRect, calibrationPanelStyle);
+        GUILayout.Label(calibrationTitleText, calibrationTitleStyle);
+        GUILayout.Space(8f);
+        GUILayout.Label(message, calibrationMessageStyle);
+        GUILayout.EndArea();
+    }
+
+    private void EnsureCalibrationGuiStyles()
+    {
+        if (calibrationPanelStyle != null)
+        {
+            return;
+        }
+
+        calibrationPanelStyle = new GUIStyle(GUI.skin.box)
+        {
+            padding = new RectOffset(24, 24, 18, 18),
+            alignment = TextAnchor.MiddleCenter
+        };
+
+        calibrationTitleStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 34,
+            fontStyle = FontStyle.Bold
+        };
+        calibrationTitleStyle.normal.textColor = Color.white;
+
+        calibrationMessageStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 24,
+            wordWrap = true
+        };
+        calibrationMessageStyle.normal.textColor = new Color(1f, 0.92f, 0.35f, 1f);
     }
 
     private ARMarkerReceiver FindBestARMarkerReceiver()
@@ -288,8 +371,9 @@ public class ShootBall : MonoBehaviour
         bool buttonUp = !currentButton && previousUdpButton;
         previousUdpButton = currentButton;
 
-        if (buttonDown)
+        if ((buttonDown || (currentButton && !isHoldingBall)) && CanStartUdpHold())
         {
+            ClearCalibrationResultMessage();
             BeginUdpHold();
         }
 
@@ -307,6 +391,26 @@ public class ShootBall : MonoBehaviour
         bool shotFired = ShootCorrectedUdpShot();
         isHoldingBall = false;
         return shotFired;
+    }
+
+    private bool CanStartUdpHold()
+    {
+        if (requireCalibrationOnStart && !isCalibrated)
+        {
+            return true;
+        }
+
+        int activeMarkerId = orderPin != null ? orderPin.CurrentMarkerId : 1;
+        bool hasCurrentMarker =
+            arMarkerReceiver != null &&
+            arMarkerReceiver.TryGetMarkerPositionX(activeMarkerId, arMarkerMaximumAge, out _);
+
+        if (!hasCurrentMarker)
+        {
+            isHoldingBall = false;
+        }
+
+        return hasCurrentMarker;
     }
 
     private void BeginUdpHold()
@@ -417,6 +521,7 @@ public class ShootBall : MonoBehaviour
             Debug.LogWarning("UDP calibration failed: swing was too small. Hold the button and swing straight forward again.", this);
             isCalibrated = false;
             isCalibrationHold = false;
+            ShowCalibrationResultMessage(calibrationFailureText);
             return;
         }
 
@@ -430,8 +535,21 @@ public class ShootBall : MonoBehaviour
         calibratedUpSensorAxis = Vector3.Cross(calibratedForwardSensorAxis, calibratedSideSensorAxis).normalized;
         isCalibrated = true;
         isCalibrationHold = false;
+        ShowCalibrationResultMessage(calibrationSuccessText);
 
         Debug.Log($"UDP calibrated. forward=({calibratedForwardSensorAxis.x:F2}, {calibratedForwardSensorAxis.y:F2}, {calibratedForwardSensorAxis.z:F2})", this);
+    }
+
+    private void ShowCalibrationResultMessage(string message)
+    {
+        calibrationResultMessage = message;
+        calibrationResultMessageUntil = Time.realtimeSinceStartup + calibrationResultMessageSeconds;
+    }
+
+    private void ClearCalibrationResultMessage()
+    {
+        calibrationResultMessage = "";
+        calibrationResultMessageUntil = -1f;
     }
 
     private void UpdatePreviousUdpButton()
@@ -526,6 +644,7 @@ public class ShootBall : MonoBehaviour
         previousUdpButton = false;
         isHoldingBall = false;
         isCalibrationHold = false;
+        ClearCalibrationResultMessage();
         holdSampleCount = 0;
         UpdatePreviousUdpButton();
 
@@ -537,6 +656,7 @@ public class ShootBall : MonoBehaviour
         if (orderPin != null)
         {
             orderPin.CompleteCurrentShotAndPrepareNextTurn();
+            UpdateBallColorForCurrentPlayer();
         }
     }
 
@@ -593,6 +713,41 @@ public class ShootBall : MonoBehaviour
         Debug.LogWarning("ShootBall needs a Rigidbody on the same GameObject.", this);
         enabled = false;
         return false;
+    }
+
+    private void UpdateBallColorForCurrentPlayer()
+    {
+        int playerIndex = orderPin != null ? orderPin.CurrentPlayerIndex : 0;
+        if (playerIndex == displayedPlayerIndex)
+        {
+            return;
+        }
+
+        displayedPlayerIndex = playerIndex;
+        Color playerColor = playerIndex == 0 ? firstPlayerBallColor : secondPlayerBallColor;
+
+        if (ballRenderers == null || ballRenderers.Length == 0)
+        {
+            ballRenderers = GetComponentsInChildren<Renderer>();
+        }
+
+        if (ballColorProperties == null)
+        {
+            ballColorProperties = new MaterialPropertyBlock();
+        }
+
+        foreach (Renderer ballRenderer in ballRenderers)
+        {
+            if (ballRenderer == null)
+            {
+                continue;
+            }
+
+            ballRenderer.GetPropertyBlock(ballColorProperties);
+            ballColorProperties.SetColor("_Color", playerColor);
+            ballColorProperties.SetColor("_BaseColor", playerColor);
+            ballRenderer.SetPropertyBlock(ballColorProperties);
+        }
     }
 
     private OrderPin FindConfiguredOrderPin()
